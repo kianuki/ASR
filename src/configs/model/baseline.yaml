@@ -1,3 +1,4 @@
-_target_: src.model.BaselineModel
+_target_: src.model.LSTM
 n_feats: 128
 fc_hidden: 512
+n_layers: 2
