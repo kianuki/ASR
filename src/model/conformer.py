@@ -191,8 +191,8 @@ class MultiheadAttention(nn.Module):
 
         attention = (ac + bd) / self.sqrt_dim
         attention = attention.masked_fill_(mask == 0, -float("inf"))
-        log_probs = nn.functional.softmax(attention, dim=-1)
-        outputs = torch.matmul(log_probs, value)
+        attn_weights = nn.functional.softmax(attention, dim=-1)
+        outputs = torch.matmul(attn_weights, value)
 
         return outputs.view(B, T, out_f)
 
@@ -203,7 +203,7 @@ class MultiheadAttention(nn.Module):
         padded_pos_score = padded_pos_score.view(B, H, T2 + 1, T1)
         padded_pos_score = padded_pos_score[:, :, 1:, :]
 
-        return padded_pos_score.view(B, H, T1, T2)[:, :, :, : T2 // +1]
+        return padded_pos_score.view(B, H, T1, T2)[:, :, :, : T2 // 2 + 1]
 
 
 class MultiheadSelfAttentionModule(nn.Module):
@@ -215,7 +215,11 @@ class MultiheadSelfAttentionModule(nn.Module):
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x):
-        pass
+        x = self.layernorm(x)
+        x = self.attention(x)
+        x = self.dropout(x)
+
+        return x
 
 
 class Conformer(nn.Module):
