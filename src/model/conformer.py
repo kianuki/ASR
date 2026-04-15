@@ -243,3 +243,11 @@ class ConformerBlock(nn.Module):
         x = x + 0.5 * self.ffn2(x)
 
         return self.layernorm(x)
+
+
+class Conformer(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        pass
