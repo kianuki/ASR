@@ -160,6 +160,8 @@ class MultiheadAttention(nn.Module):
         nn.init.xavier_uniform_(self.u)
         nn.init.xavier_uniform_(self.v)
 
+        self.out_proj = nn.Linear(in_features=in_features, out_features=in_features)
+
     def forward(self, x, mask):
         B, T, out_f = x.shape
         pe = self.position_encoder(x)
@@ -194,7 +196,7 @@ class MultiheadAttention(nn.Module):
         attn_weights = nn.functional.softmax(attention, dim=-1)
         outputs = torch.matmul(attn_weights, value)
 
-        return outputs.view(B, T, out_f)
+        return self.out_proj(outputs.view(B, T, out_f))
 
     def _relative_shift(self, pos_score):
         B, H, T1, T2 = pos_score.shape
@@ -214,9 +216,9 @@ class MultiheadSelfAttentionModule(nn.Module):
         self.attention = MultiheadAttention(in_features, max_len, num_heads)
         self.dropout = nn.Dropout(dropout_p)
 
-    def forward(self, x):
+    def forward(self, x, mask):
         x = self.layernorm(x)
-        x = self.attention(x)
+        x = self.attention(x, mask)
         x = self.dropout(x)
 
         return x
