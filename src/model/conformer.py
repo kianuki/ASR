@@ -209,7 +209,7 @@ class MultiheadAttention(nn.Module):
 
 
 class MultiheadSelfAttentionModule(nn.Module):
-    def __init__(self, in_features, dropout_p=0.1, max_len=5000, num_heads=4):
+    def __init__(self, in_features, dropout_p, max_len, num_heads):
         super().__init__()
 
         self.layernorm = nn.LayerNorm(in_features)
@@ -224,11 +224,22 @@ class MultiheadSelfAttentionModule(nn.Module):
         return x
 
 
-class Conformer(nn.Module):
-    def __init__(self, **kwargs):
+class ConformerBlock(nn.Module):
+    def __init__(self, in_features, dropout_p=0.1, max_len=5000, num_heads=4):
         super().__init__()
 
-        pass
+        self.ffn1 = FeedForwardModule(in_features, dropout_p)
+        self.ffn2 = FeedForwardModule(in_features, dropout_p)
+        self.mhsa = MultiheadSelfAttentionModule(
+            in_features, dropout_p, max_len, num_heads
+        )
+        self.conv = ConvolutionModule(in_features, dropout_p)
+        self.layernorm = nn.LayerNorm(in_features)
 
-    def forward(self):
-        pass
+    def forward(self, x, mask):
+        x = x + 0.5 * self.ffn1(x)
+        x = x + self.mhsa(x, mask)
+        x = x + self.conv(x)
+        x = x + 0.5 * self.ffn2(x)
+
+        return self.layernorm(x)
