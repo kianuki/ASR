@@ -225,7 +225,7 @@ class MultiheadSelfAttentionModule(nn.Module):
 
 
 class ConformerBlock(nn.Module):
-    def __init__(self, in_features, dropout_p=0.1, max_len=5000, num_heads=4):
+    def __init__(self, in_features, dropout_p, max_len, num_heads):
         super().__init__()
 
         self.ffn1 = FeedForwardModule(in_features, dropout_p)
@@ -245,9 +245,109 @@ class ConformerBlock(nn.Module):
         return self.layernorm(x)
 
 
-class Conformer(nn.Module):
-    def __init__(self):
+class SubsamplingModule(nn.Module):
+    def __init__(self, out_channels):
         super().__init__()
 
+        self.conv1 = nn.Conv2d(
+            in_channels=1, out_channels=out_channels, stride=2, kernel_size=3, padding=1
+        )
+        self.conv2 = nn.Conv2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            stride=2,
+            kernel_size=3,
+            padding=1,
+        )
+        self.swish = nn.SiLU()
+        self.batchnorm = nn.BatchNorm2d(num_features=out_channels)
+
     def forward(self, x):
-        pass
+        x = self.conv1(x)
+        x = self.swish(x)
+        x = self.conv2(x)
+        x = self.swish(x)
+
+        return self.batchnorm(x)
+
+
+class Conformer(nn.Module):
+    def __init__(
+        self,
+        in_features,
+        n_tokens,
+        n_mels=80,
+        dropout_p=0.1,
+        max_len=5000,
+        num_heads=4,
+        num_blocks=4,
+        out_channels=4,
+    ):
+        super().__init__()
+        self.out_channels = out_channels
+        self.conformer_blocks = nn.ModuleList(
+            [
+                ConformerBlock(in_features, dropout_p, max_len, num_heads)
+                for _ in range(num_blocks)
+            ]
+        )
+        self.proj = nn.Linear(
+            in_features=out_channels * n_mels // 4, out_features=in_features
+        )
+        self.dropout = nn.Dropout(dropout_p)
+        self.subsampling = SubsamplingModule(out_channels)
+        self.classifier_proj = nn.Linear(in_features=in_features, out_features=n_tokens)
+
+    def forward(self, spectrogram, spectrogram_length, **batch):
+        # B, n_mels, T -> B, 1, n_mels, T -> B, out_channels, n_mels/4, T/4 -> B, out_channels * n_mels/4, T/4 -> B, T/4, d_model
+        B, n_mels, T = spectrogram.shape
+        x = self.subsampling(spectrogram.unsqueeze(1))  # B, out_channels, n_mels/4, T/4
+        x = x.view(B, self.out_channels * n_mels // 4, T // 4).transpose(1, 2)
+        x = self.proj(x)  # B, T/4, d_model
+        x = self.dropout(x)
+
+        mask = self.create_mask(spectrogram_length, T // 4)
+        for conformer_block in self.conformer_blocks:
+            x = conformer_block(x, mask)
+
+        x = self.classifier_proj(x)
+        log_probs = nn.functional.log_softmax(x, dim=-1)
+        log_probs_length = self.transform_input_lengths(spectrogram_length)
+
+        return {"log_probs": log_probs, "log_probs_length": log_probs_length}
+
+    def transform_input_lengths(self, input_lengths):
+        """
+        As the network may compress the Time dimension, we need to know
+        what are the new temporal lengths after compression.
+
+        Args:
+            input_lengths (Tensor): old input lengths
+        Returns:
+            output_lengths (Tensor): new temporal lengths
+        """
+        return ((input_lengths + 1) // 2 + 1) // 2
+
+    def create_mask(self, spectrogram_lengths, max_len):
+        new_lengths = self.transform_input_lengths(spectrogram_lengths)
+        mask = torch.arange(max_len, device=spectrogram_lengths.device).unsqueeze(
+            0
+        ) < new_lengths.unsqueeze(1)
+        mask = mask.unsqueeze(1).unsqueeze(1)  # [B, 1, 1, max_len]
+
+        return mask
+
+    def __str__(self):
+        """
+        Model prints with the number of parameters.
+        """
+        all_parameters = sum([p.numel() for p in self.parameters()])
+        trainable_parameters = sum(
+            [p.numel() for p in self.parameters() if p.requires_grad]
+        )
+
+        result_info = super().__str__()
+        result_info = result_info + f"\nAll parameters: {all_parameters}"
+        result_info = result_info + f"\nTrainable parameters: {trainable_parameters}"
+
+        return result_info
