@@ -301,12 +301,14 @@ class Conformer(nn.Module):
     def forward(self, spectrogram, spectrogram_length, **batch):
         # B, n_mels, T -> B, 1, n_mels, T -> B, out_channels, n_mels/4, T/4 -> B, out_channels * n_mels/4, T/4 -> B, T/4, d_model
         B, n_mels, T = spectrogram.shape
-        x = self.subsampling(spectrogram.unsqueeze(1))  # B, out_channels, n_mels/4, T/4
-        x = x.view(B, self.out_channels * n_mels // 4, T // 4).transpose(1, 2)
-        x = self.proj(x)  # B, T/4, d_model
+        x = self.subsampling(spectrogram.unsqueeze(1))  # B, out_channels, nn_mels, TT
+        x = x.permute(0, 3, 1, 2)  # B, TT, out_channels, nn_mels
+        TT = x.size(1)
+        x = x.view(B, TT, -1)
+        x = self.proj(x)  # B, TT, d_model
         x = self.dropout(x)
 
-        mask = self.create_mask(spectrogram_length, T // 4)
+        mask = self.create_mask(spectrogram_length, TT)
         for conformer_block in self.conformer_blocks:
             x = conformer_block(x, mask)
 
