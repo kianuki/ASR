@@ -309,6 +309,8 @@ class Conformer(nn.Module):
         x = self.dropout(x)
 
         mask = self.create_mask(spectrogram_length, TT)
+        mask = mask.to(x.device)
+
         for conformer_block in self.conformer_blocks:
             x = conformer_block(x, mask)
 
@@ -332,9 +334,7 @@ class Conformer(nn.Module):
 
     def create_mask(self, spectrogram_lengths, max_len):
         new_lengths = self.transform_input_lengths(spectrogram_lengths)
-        mask = torch.arange(max_len, device=spectrogram_lengths.device).unsqueeze(
-            0
-        ) < new_lengths.unsqueeze(1)
+        mask = torch.arange(max_len).unsqueeze(0) < new_lengths.unsqueeze(1)
         mask = mask.unsqueeze(1).unsqueeze(1)  # [B, 1, 1, max_len]
 
         return mask
