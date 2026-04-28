@@ -19,7 +19,7 @@ lr_scheduler:
 loss_function:
   _target_: src.loss.CTCLossWrapper
 text_encoder:
-  _target_: src.text_encoder.CTCTextEncoder
+  _target_: src.text_encoder.BPEEncoder
 trainer:
   log_step: 50
   n_epochs: 50
