@@ -71,9 +71,15 @@ class BPEEncoder:
         Returns:
             raw_text (str): raw text with empty tokens and repetitions.
         """
+        if hasattr(inds, "tolist"):
+            inds = inds.tolist()
+
         return self.sp.decode_ids(inds)
 
     def ctc_decode(self, inds) -> str:
+        if hasattr(inds, "tolist"):
+            inds = inds.tolist()
+
         prev_ind = None
         ctc_inds = []
 

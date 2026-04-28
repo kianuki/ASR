@@ -197,7 +197,7 @@ class MultiheadAttention(nn.Module):
         attn_weights = nn.functional.softmax(attention, dim=-1)
         outputs = torch.matmul(attn_weights, value).transpose(1, 2)
 
-        return self.out_proj(outputs.view(B, T, out_f))
+        return self.out_proj(outputs.contiguous().view(B, T, out_f))
 
     def _relative_shift(self, pos_score):
         B, H, T1, T2 = pos_score.shape
