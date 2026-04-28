@@ -192,9 +192,10 @@ class MultiheadAttention(nn.Module):
         bd = self._relative_shift(bd)
 
         attention = (ac + bd) / self.sqrt_dim
-        attention = attention.masked_fill_(mask == 0, -float("inf"))
+        mask_value = -1e30 if attention.dtype == torch.float32 else -1e4
+        attention.masked_fill_(~mask.unsqueeze(1), mask_value)
         attn_weights = nn.functional.softmax(attention, dim=-1)
-        outputs = torch.matmul(attn_weights, value)
+        outputs = torch.matmul(attn_weights, value).transpose(1, 2)
 
         return self.out_proj(outputs.view(B, T, out_f))
 
@@ -250,25 +251,21 @@ class SubsamplingModule(nn.Module):
         super().__init__()
 
         self.conv1 = nn.Conv2d(
-            in_channels=1, out_channels=out_channels, stride=2, kernel_size=3, padding=1
+            in_channels=1, out_channels=out_channels, stride=2, kernel_size=3
         )
         self.conv2 = nn.Conv2d(
-            in_channels=out_channels,
-            out_channels=out_channels,
-            stride=2,
-            kernel_size=3,
-            padding=1,
+            in_channels=out_channels, out_channels=out_channels, stride=2, kernel_size=3
         )
         self.swish = nn.SiLU()
-        self.batchnorm = nn.BatchNorm2d(num_features=out_channels)
+        self.pish = nn.SiLU()
 
     def forward(self, x):
         x = self.conv1(x)
         x = self.swish(x)
         x = self.conv2(x)
-        x = self.swish(x)
+        x = self.pish(x)
 
-        return self.batchnorm(x)
+        return x
 
 
 class Conformer(nn.Module):
@@ -292,29 +289,41 @@ class Conformer(nn.Module):
             ]
         )
         self.proj = nn.Linear(
-            in_features=out_channels * n_mels // 4, out_features=in_features
+            in_features=out_channels * (((n_mels - 1) // 2 - 1) // 2),
+            out_features=in_features,
         )
         self.dropout = nn.Dropout(dropout_p)
         self.subsampling = SubsamplingModule(out_channels)
         self.classifier_proj = nn.Linear(in_features=in_features, out_features=n_tokens)
 
-    def forward(self, spectrogram, spectrogram_length, **batch):
+    def forward(
+        self, spectrogram, spectrogram_length, text_encoded_length=None, **batch
+    ):
         # B, n_mels, T -> B, 1, n_mels, T -> B, out_channels, n_mels/4, T/4 -> B, out_channels * n_mels/4, T/4 -> B, T/4, d_model
-        B, n_mels, T = spectrogram.shape
+        B = spectrogram.size(0)
+        max_len = spectrogram.size(-1)
+        device = spectrogram.device
+        mask = torch.arange(max_len, device=device).expand(
+            B, max_len
+        ) < spectrogram_length.unsqueeze(1).to(device)
+
         x = self.subsampling(spectrogram.unsqueeze(1))  # B, out_channels, nn_mels, TT
+
+        mask = mask[:, :-2:2]
+        mask = mask[:, :-2:2]
+        mask = torch.min(mask[:, None, :], mask[:, :, None])
+
         x = x.permute(0, 3, 1, 2)  # B, TT, out_channels, nn_mels
         TT = x.size(1)
         x = x.view(B, TT, -1)
         x = self.proj(x)  # B, TT, d_model
         x = self.dropout(x)
 
-        mask = self.create_mask(spectrogram_length, TT)
-        mask = mask.to(x.device)
-
         for conformer_block in self.conformer_blocks:
             x = conformer_block(x, mask)
 
         x = self.classifier_proj(x)
+
         log_probs = nn.functional.log_softmax(x, dim=-1)
         log_probs_length = self.transform_input_lengths(spectrogram_length)
 
@@ -322,22 +331,14 @@ class Conformer(nn.Module):
 
     def transform_input_lengths(self, input_lengths):
         """
-        As the network may compress the Time dimension, we need to know
-        what are the new temporal lengths after compression.
+        Calculate output lengths after subsampling.
 
         Args:
             input_lengths (Tensor): old input lengths
         Returns:
             output_lengths (Tensor): new temporal lengths
         """
-        return ((input_lengths + 1) // 2 + 1) // 2
-
-    def create_mask(self, spectrogram_lengths, max_len):
-        new_lengths = self.transform_input_lengths(spectrogram_lengths)
-        mask = torch.arange(max_len).unsqueeze(0) < new_lengths.unsqueeze(1)
-        mask = mask.unsqueeze(1).unsqueeze(1)  # [B, 1, 1, max_len]
-
-        return mask
+        return ((input_lengths // 2) - 1) // 2 - 1
 
     def __str__(self):
         """
