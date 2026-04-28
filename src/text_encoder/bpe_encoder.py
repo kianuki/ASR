@@ -24,7 +24,6 @@ class BPEEncoder:
                 set to ascii
         """
         self.sp = None
-        self.vocab = None
         self.vocab_size = vocab_size
 
         self.needs_training = needs_training
@@ -32,7 +31,7 @@ class BPEEncoder:
             self._train(dataset, partition)
 
         self.sp = spm.SentencePieceProcessor()
-        self.sp.load(ROOT_PATH / "src" / "text_encoder" / "m_bpe.model")
+        self.sp.load(str(ROOT_PATH / "src" / "text_encoder" / "m_bpe.model"))
 
         self.EMPTY_IND = self.sp.piece_to_id(self.EMPTY_TOK)
 
@@ -58,7 +57,7 @@ class BPEEncoder:
     def encode(self, text) -> torch.Tensor:
         text = self.normalize_text(text)
         try:
-            return self.sp.encode_as_ids(text)
+            return torch.tensor(self.sp.encode_as_ids(text), dtype=torch.long)
         except KeyError:
             raise Exception(f"Can't encode text '{text}'")
 

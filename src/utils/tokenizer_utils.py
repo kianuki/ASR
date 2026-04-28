@@ -13,7 +13,7 @@ def prepare_transcriptions(dataset="librispeech", partition="train-clean-100"):
     Returns:
         path (str): path where transcriptions are located.
     """
-    index_path = (
+    index_path = str(
         ROOT_PATH / "data" / "datasets" / dataset.lower() / f"{partition}_index.json"
     )
 
@@ -27,7 +27,7 @@ def prepare_transcriptions(dataset="librispeech", partition="train-clean-100"):
         index = json.load(f)
 
     texts = [item["text"] for item in index]
-    transcriptions_path = ROOT_PATH / "src" / "text_encoder" / "transcriptions.txt"
+    transcriptions_path = str(ROOT_PATH / "src" / "text_encoder" / "transcriptions.txt")
 
     with open(transcriptions_path, "w") as f:
         f.write("\n".join(texts))

@@ -11,6 +11,7 @@ wandb
 comet_ml
 hydra-core
 editdistance
+sentencepiece
 datasets
 wget
 
