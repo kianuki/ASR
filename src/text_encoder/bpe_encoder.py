@@ -12,7 +12,7 @@ class BPEEncoder:
 
     def __init__(
         self,
-        vocab_size=1000,
+        vocab_size=128,
         needs_training=False,
         dataset=None,
         partition=None,
