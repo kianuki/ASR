@@ -87,6 +87,7 @@ class BPEEncoder:
             cur_ind = int(ind)
 
             if cur_ind == prev_ind or cur_ind == self.EMPTY_IND:
+                prev_ind = cur_ind
                 continue
 
             ctc_inds.append(cur_ind)

@@ -67,6 +67,7 @@ class CTCTextEncoder:
             cur_ind = int(ind)
 
             if cur_ind == prev_ind or cur_ind == self.EMPTY_IND:
+                prev_ind = cur_ind
                 continue
 
             text += self.ind2char[cur_ind]
