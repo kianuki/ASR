@@ -4,14 +4,16 @@ defaults:
   - metrics: example
   - datasets: example
   - dataloader: example
-  - transforms: example_only_instance
+  - transforms: conformer
   - _self_
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 3e-4
+  lr: 1e-3
+  betas: [0.9, 0.98]
+  eps: 1e-9
 lr_scheduler:
   _target_: torch.optim.lr_scheduler.OneCycleLR
-  max_lr: 1e-2
+  max_lr: 4.17e-3
   pct_start: 0.1
   steps_per_epoch: ${trainer.epoch_len}
   epochs: ${trainer.n_epochs}

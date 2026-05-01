@@ -1,0 +1,26 @@
+train:
+  get_spectrogram: # special key for getting spectrogram
+    _target_: torchaudio.transforms.MelSpectrogram
+    sample_rate: 16000
+    n_fft: 512
+    win_length: 400
+    hop_length: 160
+    n_mels: 80
+  audio: # name of the tensor on which we apply transform
+    _target_: torchvision.transforms.v2.Compose
+    transforms:
+      - _target_: src.transforms.wav_augs.Gain
+  spectrogram:
+    _target_: torch.nn.Sequential
+    _args_:
+      - _target_: src.transforms.spec_augs.NormalizeInstance
+      - _target_: src.transforms.spec_augs.TimeMasking
+      - _target_: src.transforms.spec_augs.FrequencyMasking
+inference:
+  get_spectrogram:
+    _target_: torchaudio.transforms.MelSpectrogram
+    sample_rate: 16000
+    n_fft: 512
+    win_length: 400
+    hop_length: 160
+    n_mels: 80
